@@ -1,0 +1,3 @@
+{"name":"reject_path_escape","plan":{"files":[{"path":"../secret.py","content":"bad"}],"commands":[],"notes":"bad"},"should_pass":false}
+{"name":"accept_tested_workspace_plan","plan":{"files":[{"path":"app.py","content":"print('ok')"},{"path":"test_app.py","content":"assert True"}],"commands":["python -m unittest"],"notes":"includes a test"},"should_pass":true}
+

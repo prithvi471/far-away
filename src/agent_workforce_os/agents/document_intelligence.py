@@ -30,6 +30,8 @@ class DocumentIntelligenceAgent(BaseAgent):
             content_hash=parsed.content_hash,
             text=parsed.text,
             summary=summary,
+            organization_id=input_payload.get("organization_id", "org_default"),
+            project_id=input_payload.get("project_id", "project_default"),
             skills=skills,
             metadata={**parsed.metadata, "candidate_tasks": extract_candidate_tasks(parsed.text)},
         )
@@ -52,4 +54,3 @@ class DocumentIntelligenceAgent(BaseAgent):
                 "candidate_tasks": record.metadata["candidate_tasks"],
             },
         )
-

@@ -12,7 +12,9 @@ authors = [{ name = "Agent Workforce OS" }]
 dependencies = []
 
 [project.optional-dependencies]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
 pdf = ["pypdf>=4.0"]
+connectors = ["pypdf>=4.0"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
@@ -20,4 +22,3 @@ agentos = "agent_workforce_os.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-

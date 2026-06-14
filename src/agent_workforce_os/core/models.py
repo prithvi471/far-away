@@ -30,6 +30,76 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
 
 
+class Role(str, Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MANAGER = "manager"
+    AGENT_OPERATOR = "agent_operator"
+    VIEWER = "viewer"
+
+
+class QueueStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class ApprovalStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+@dataclass
+class Organization:
+    id: str
+    name: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=now_utc)
+
+
+@dataclass
+class Project:
+    id: str
+    organization_id: str
+    name: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=now_utc)
+
+
+@dataclass
+class User:
+    id: str
+    organization_id: str
+    email: str
+    name: str
+    is_active: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=now_utc)
+
+
+@dataclass
+class ApiToken:
+    id: str
+    user_id: str
+    name: str
+    token_hash: str
+    created_at: str = field(default_factory=now_utc)
+    last_used_at: str | None = None
+    revoked_at: str | None = None
+
+
+@dataclass
+class Membership:
+    id: str
+    user_id: str
+    organization_id: str
+    project_id: str | None
+    role: Role
+    created_at: str = field(default_factory=now_utc)
+
+
 @dataclass
 class DocumentRecord:
     id: str
@@ -37,6 +107,8 @@ class DocumentRecord:
     content_hash: str
     text: str
     summary: str
+    organization_id: str = "org_default"
+    project_id: str = "project_default"
     skills: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=now_utc)
@@ -47,6 +119,8 @@ class WorkerProfile:
     id: str
     kind: WorkerKind
     name: str
+    organization_id: str = "org_default"
+    project_id: str = "project_default"
     title: str = ""
     resume_document_id: str | None = None
     skills: dict[str, float] = field(default_factory=dict)
@@ -63,6 +137,8 @@ class Task:
     id: str
     title: str
     description: str
+    organization_id: str = "org_default"
+    project_id: str = "project_default"
     required_skills: list[str] = field(default_factory=list)
     status: TaskStatus = TaskStatus.QUEUED
     assignee_id: str | None = None
@@ -104,3 +180,52 @@ class Artifact:
     metadata: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=now_utc)
 
+
+@dataclass
+class QueueJob:
+    id: str
+    job_type: str
+    payload: dict[str, Any]
+    status: QueueStatus = QueueStatus.QUEUED
+    result: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    attempts: int = 0
+    available_at: str = field(default_factory=now_utc)
+    created_at: str = field(default_factory=now_utc)
+    updated_at: str = field(default_factory=now_utc)
+
+
+@dataclass
+class ApprovalGate:
+    id: str
+    task_id: str
+    gate_type: str
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    requested_by: str | None = None
+    approved_by: str | None = None
+    reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=now_utc)
+    updated_at: str = field(default_factory=now_utc)
+
+
+@dataclass
+class TraceEvent:
+    id: str
+    trace_id: str
+    event_type: str
+    aggregate_type: str
+    aggregate_id: str
+    parent_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=now_utc)
+
+
+@dataclass
+class EvalRun:
+    id: str
+    dataset_name: str
+    status: str
+    score: float
+    metrics: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=now_utc)

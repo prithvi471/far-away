@@ -1,0 +1,3 @@
+{"name":"project_brief_tasks","text":"Python API work\n\nTask: Build ingestion endpoint\nTODO: Add testing coverage\n","expected_skills":["python","api","testing"],"expected_task_count":2}
+{"name":"resume_skills","text":"Senior engineer with Python, SQL, monitoring, and Docker experience.","expected_skills":["python","sql","monitoring","docker"],"expected_task_count":0}
+

@@ -6,8 +6,12 @@ from dataclasses import asdict
 from typing import Any
 
 from .app import build_orchestrator, serve
+from .core.auth import generate_token
 from .core.config import load_config
-from .core.models import WorkerKind
+from .core.evals import run_all_evals
+from .core.models import Membership, QueueStatus, Role, User, WorkerKind, new_id
+from .core.queue import QueueWorker
+from .core.tracing import trace_to_mermaid
 
 
 def _csv(value: str | None) -> list[str]:
@@ -30,6 +34,15 @@ def build_parser() -> argparse.ArgumentParser:
     ingest = sub.add_parser("ingest-document", help="Ingest and analyze a document")
     ingest.add_argument("path")
     ingest.add_argument("--llm-summary", action="store_true")
+
+    ingest_source = sub.add_parser("ingest-source", help="Ingest a local or connector document URI")
+    ingest_source.add_argument("uri")
+    ingest_source.add_argument("--llm-summary", action="store_true")
+
+    bootstrap = sub.add_parser("bootstrap-admin", help="Create an owner token for the default organization/project")
+    bootstrap.add_argument("--email", required=True)
+    bootstrap.add_argument("--name", required=True)
+    bootstrap.add_argument("--token-name", default="local-admin")
 
     worker = sub.add_parser("add-worker", help="Register an employee or digital agent")
     worker.add_argument("--kind", choices=[kind.value for kind in WorkerKind], default=WorkerKind.EMPLOYEE.value)
@@ -56,6 +69,28 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--test-command", action="append", default=[])
     build.add_argument("--allow-no-tests", action="store_true")
 
+    enqueue = sub.add_parser("enqueue", help="Create an async queue job")
+    enqueue.add_argument("--job-type", required=True)
+    enqueue.add_argument("--payload-json", default="{}")
+
+    work_queue = sub.add_parser("work-queue", help="Run queued agent jobs")
+    work_queue.add_argument("--limit", type=int, default=10)
+
+    list_queue = sub.add_parser("list-queue", help="List async queue jobs")
+    list_queue.add_argument("--status", default=None)
+
+    approve = sub.add_parser("approve", help="Approve a pending human gate")
+    approve.add_argument("--approval-id", required=True)
+    approve.add_argument("--approved-by", default=None)
+
+    approvals = sub.add_parser("list-approvals", help="List approval gates")
+    approvals.add_argument("--task-id", default=None)
+
+    trace = sub.add_parser("trace", help="Render trace events for an aggregate")
+    trace.add_argument("--aggregate-id", required=True)
+    trace.add_argument("--format", choices=["json", "mermaid"], default="json")
+
+    sub.add_parser("run-evals", help="Run built-in eval datasets")
     sub.add_parser("monitor", help="Run monitoring cycle")
     sub.add_parser("performance", help="Recalculate performance scores")
     sub.add_parser("llm-status", help="Show configured LLM provider status without exposing secrets")
@@ -89,6 +124,23 @@ def main(argv: list[str] | None = None) -> None:
         )
     elif args.command == "ingest-document":
         _print(orchestrator.ingest_document(args.path, args.llm_summary))
+    elif args.command == "ingest-source":
+        _print(orchestrator.ingest_source(args.uri, args.llm_summary))
+    elif args.command == "bootstrap-admin":
+        token = generate_token()
+        user = User(id=new_id("user"), organization_id="org_default", email=args.email, name=args.name)
+        orchestrator.context.storage.upsert_user(user)
+        orchestrator.context.storage.add_membership(
+            Membership(
+                id=new_id("member"),
+                user_id=user.id,
+                organization_id="org_default",
+                project_id=None,
+                role=Role.OWNER,
+            )
+        )
+        orchestrator.context.storage.issue_api_token(user.id, args.token_name, token)
+        _print({"user_id": user.id, "token": token, "note": "Store this token securely. It is shown only once."})
     elif args.command == "add-worker":
         worker = orchestrator.register_worker(
             kind=WorkerKind(args.kind),
@@ -115,6 +167,25 @@ def main(argv: list[str] | None = None) -> None:
         _print(orchestrator.route_task(args.task_id))
     elif args.command == "build":
         _print(orchestrator.run_build_pipeline(args.task_id, args.test_command, args.allow_no_tests))
+    elif args.command == "enqueue":
+        _print(orchestrator.enqueue_agent_job(args.job_type, json.loads(args.payload_json)))
+    elif args.command == "work-queue":
+        _print(QueueWorker(orchestrator).run_batch(args.limit))
+    elif args.command == "list-queue":
+        status_filter = QueueStatus(args.status) if args.status else None
+        _print([asdict(job) for job in orchestrator.context.storage.list_jobs(status_filter)])
+    elif args.command == "approve":
+        _print(orchestrator.approve(args.approval_id, args.approved_by))
+    elif args.command == "list-approvals":
+        _print([asdict(gate) for gate in orchestrator.context.storage.list_approvals(args.task_id)])
+    elif args.command == "trace":
+        events = orchestrator.context.storage.list_trace_events(aggregate_id=args.aggregate_id)
+        if args.format == "mermaid":
+            print(trace_to_mermaid(events))
+        else:
+            _print([asdict(event) for event in events])
+    elif args.command == "run-evals":
+        _print(run_all_evals(orchestrator, config.root_dir / "evals"))
     elif args.command == "monitor":
         _print(orchestrator.monitor())
     elif args.command == "performance":

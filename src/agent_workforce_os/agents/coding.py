@@ -47,6 +47,27 @@ class CodingAgent(BaseAgent):
             Artifact(id=new_id("artifact"), task_id=task.id, path=str(task_spec), artifact_type="task_spec")
         )
 
+        if task.metadata.get("customer_repository") and not self.context.storage.has_approved_gate(task.id, "code_write"):
+            gate = self.context.storage.request_approval(
+                task_id=task.id,
+                gate_type="code_write",
+                reason="Human approval is required before a coding agent modifies a customer repository.",
+            )
+            task.status = TaskStatus.BLOCKED
+            task.metadata["coding"] = {
+                "workspace": str(workspace),
+                "blocked_reason": "Waiting for human approval before customer repository code write.",
+                "approval_id": gate.id,
+            }
+            self.context.storage.update_task(task)
+            return AgentDecision(
+                agent_name=self.name,
+                action="coding_blocked_needs_approval",
+                confidence=1.0,
+                reasons=["Customer repository changes require a human approval gate"],
+                payload={"task_id": task.id, "workspace": str(workspace), "approval_id": gate.id},
+            )
+
         if not self.context.llm.available:
             task.status = TaskStatus.BLOCKED
             task.metadata["coding"] = {
@@ -107,4 +128,3 @@ class CodingAgent(BaseAgent):
             reasons=[f"Wrote {len(written)} files into guarded workspace"],
             payload={"task_id": task.id, "workspace": str(workspace), "files_written": written, "commands": commands},
         )
-

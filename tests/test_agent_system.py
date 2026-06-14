@@ -13,10 +13,14 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from agent_workforce_os.agents.orchestrator import AgentOrchestrator
 from agent_workforce_os.core.agent import AgentContext
+from agent_workforce_os.core.auth import generate_token, has_permission
 from agent_workforce_os.core.config import LLMConfig, MonitoringConfig, RoutingConfig, RuntimeConfig, StorageConfig, WorkspaceConfig, load_env_file
+from agent_workforce_os.core.evals import run_all_evals
 from agent_workforce_os.core.llm import OpenAIResponsesProvider, extract_responses_text, parse_json_text
 from agent_workforce_os.core.llm import NoopLLMProvider
-from agent_workforce_os.core.models import TaskStatus, WorkerKind
+from agent_workforce_os.core.models import Membership, Role, TaskStatus, User, WorkerKind, new_id
+from agent_workforce_os.core.queue import QueueWorker
+from agent_workforce_os.core.tracing import trace_to_mermaid
 from agent_workforce_os.core.storage import SQLiteStore
 
 
@@ -258,6 +262,81 @@ model_env = "AGENTOS_MISSING_OPENAI_MODEL"
         self.assertEqual(captured["payload"]["text"]["format"]["type"], "json_schema")
         self.assertEqual(captured["payload"]["text"]["format"]["name"], "llm_smoke_test")
         self.assertTrue(captured["payload"]["text"]["format"]["strict"])
+
+    def test_auth_token_maps_to_principal_and_permissions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            orchestrator = self.make_orchestrator(Path(temp))
+            raw_token = generate_token()
+            user = User(id=new_id("user"), organization_id="org_default", email="owner@example.com", name="Owner")
+            orchestrator.context.storage.upsert_user(user)
+            orchestrator.context.storage.add_membership(
+                Membership(
+                    id=new_id("member"),
+                    user_id=user.id,
+                    organization_id="org_default",
+                    project_id=None,
+                    role=Role.OWNER,
+                )
+            )
+            orchestrator.context.storage.issue_api_token(user.id, "test", raw_token)
+            principal = orchestrator.context.storage.get_principal_by_token(raw_token)
+            self.assertIsNotNone(principal)
+            self.assertTrue(has_permission(principal, "agents:run"))
+
+    def test_queue_worker_routes_task_async(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            orchestrator = self.make_orchestrator(Path(temp))
+            worker = orchestrator.register_worker(
+                WorkerKind.DIGITAL_AGENT,
+                name="Async Builder",
+                skills=["python", "api", "testing"],
+                years_experience=4,
+            )
+            task = orchestrator.create_task("Async route", "Route me", ["python", "api"])
+            job = orchestrator.enqueue_agent_job("route_task", {"task_id": task.id})
+            result = QueueWorker(orchestrator).run_once()
+            updated = orchestrator.context.storage.get_task(task.id)
+            jobs = orchestrator.context.storage.list_jobs()
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(updated.assignee_id, worker.id)
+            self.assertEqual(jobs[0].id, job["id"])
+            self.assertEqual(jobs[0].status.value, "done")
+
+    def test_customer_repo_build_requires_approval_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            orchestrator = self.make_orchestrator(Path(temp))
+            task = orchestrator.create_task(
+                "Customer code change",
+                "Modify a customer repo safely.",
+                ["python"],
+                metadata={"customer_repository": "github://customer/repo"},
+            )
+            result = orchestrator.run_build_pipeline(task.id, allow_no_tests=True)
+            approvals = orchestrator.context.storage.list_approvals(task.id)
+            updated = orchestrator.context.storage.get_task(task.id)
+            self.assertEqual(result["build"]["action"], "coding_blocked_needs_approval")
+            self.assertEqual(updated.status, TaskStatus.BLOCKED)
+            self.assertEqual(len(approvals), 1)
+            self.assertEqual(approvals[0].gate_type, "code_write")
+
+    def test_trace_mermaid_renders_agent_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            orchestrator = self.make_orchestrator(Path(temp))
+            task = orchestrator.create_task("Trace route", "Route me", ["python"])
+            orchestrator.register_worker(WorkerKind.DIGITAL_AGENT, "Tracer", skills=["python"], years_experience=3)
+            orchestrator.route_task(task.id)
+            events = orchestrator.context.storage.list_trace_events(aggregate_id=task.id)
+            diagram = trace_to_mermaid(events)
+            self.assertIn("flowchart TD", diagram)
+            self.assertIn("task_router.task_assigned", diagram)
+
+    def test_builtin_evals_run_and_record_score(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            orchestrator = self.make_orchestrator(Path(temp))
+            eval_root = ROOT / "evals"
+            result = run_all_evals(orchestrator, eval_root)
+            self.assertEqual(result["run"]["status"], "ok")
+            self.assertGreaterEqual(result["run"]["score"], 0.5)
 
 
 if __name__ == "__main__":
