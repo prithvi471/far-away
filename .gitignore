@@ -3,8 +3,11 @@ __pycache__/
 .pytest_cache/
 .env
 runtime/*.db
+runtime/*.log
+runtime/*.pid
+runtime/*.cmd
+runtime/*token*.json
 runtime/artifacts/*
 runtime/workspaces/*
 !runtime/artifacts/.gitkeep
 !runtime/workspaces/.gitkeep
-
