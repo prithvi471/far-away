@@ -1,0 +1,66 @@
+[storage]
+database_path = "runtime/agentos.db"
+
+[workspace]
+root_path = "runtime/workspaces"
+artifact_path = "runtime/artifacts"
+
+[llm]
+provider = "none"
+endpoint_env = "AGENTOS_LLM_ENDPOINT"
+api_key_env = "OPENAI_API_KEY"
+model_env = "AGENTOS_LLM_MODEL"
+temperature = 0.2
+timeout_seconds = 60
+
+[routing]
+min_confidence = 0.25
+skill_weight = 0.46
+experience_weight = 0.16
+availability_weight = 0.14
+load_weight = 0.12
+performance_weight = 0.12
+
+[monitoring]
+stale_hours = 24
+
+[skills]
+catalog = [
+  "python",
+  "javascript",
+  "typescript",
+  "java",
+  "go",
+  "rust",
+  "sql",
+  "sqlite",
+  "postgres",
+  "mongodb",
+  "redis",
+  "api",
+  "fastapi",
+  "django",
+  "flask",
+  "react",
+  "node",
+  "testing",
+  "pytest",
+  "unittest",
+  "architecture",
+  "system design",
+  "machine learning",
+  "llm",
+  "agents",
+  "document parsing",
+  "resume screening",
+  "monitoring",
+  "devops",
+  "docker",
+  "kubernetes",
+  "security",
+  "performance",
+  "coding",
+  "qa",
+  "project management"
+]
+

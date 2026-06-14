@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-workforce-os"
+version = "0.1.0"
+description = "Production-oriented v0 for a multi-agent workforce orchestration system."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Agent Workforce OS" }]
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pypdf>=4.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+agentos = "agent_workforce_os.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

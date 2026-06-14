@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+runtime/*.db
+runtime/artifacts/*
+runtime/workspaces/*
+!runtime/artifacts/.gitkeep
+!runtime/workspaces/.gitkeep
+
