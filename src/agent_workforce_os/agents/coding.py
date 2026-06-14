@@ -1,10 +1,30 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from .base_imports import AgentDecision, Artifact, BaseAgent, TaskStatus, new_id
 from agent_workforce_os.tools.workspace import safe_join
+
+
+CODING_PLAN_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "files": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+        "commands": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string"},
+    },
+    "required": ["files", "commands", "notes"],
+}
 
 
 class CodingAgent(BaseAgent):
@@ -42,9 +62,9 @@ class CodingAgent(BaseAgent):
                 payload={"task_id": task.id, "workspace": str(workspace)},
             )
 
-        response = self.context.llm.complete(
+        plan = self.context.llm.complete_json(
             system=(
-                "You are a coding agent. Return only valid JSON with keys files, commands, and notes. "
+                "You are a coding agent. Return a JSON coding plan with keys files, commands, and notes. "
                 "files must be a list of objects with relative path and content strings. "
                 "commands must be shell commands that can run from the workspace root."
             ),
@@ -52,10 +72,11 @@ class CodingAgent(BaseAgent):
                 f"Build the requested project work inside a new workspace.\n"
                 f"Title: {task.title}\nDescription: {task.description}\n"
                 f"Required skills: {', '.join(task.required_skills)}\n"
-                "Return JSON only."
+                "Generate only files required for this task. Prefer tests when the work is code."
             ),
+            schema=CODING_PLAN_SCHEMA,
+            name="coding_plan",
         )
-        plan = self._parse_json(response.text)
         files = plan.get("files", [])
         if not isinstance(files, list):
             raise ValueError("LLM response field files must be a list")
@@ -86,15 +107,4 @@ class CodingAgent(BaseAgent):
             reasons=[f"Wrote {len(written)} files into guarded workspace"],
             payload={"task_id": task.id, "workspace": str(workspace), "files_written": written, "commands": commands},
         )
-
-    def _parse_json(self, value: str) -> dict:
-        clean = value.strip()
-        if clean.startswith("```"):
-            clean = clean.strip("`")
-            if clean.startswith("json"):
-                clean = clean[4:].strip()
-        data = json.loads(clean)
-        if not isinstance(data, dict):
-            raise ValueError("LLM coding response must be a JSON object")
-        return data
 

@@ -6,8 +6,9 @@ root_path = "runtime/workspaces"
 artifact_path = "runtime/artifacts"
 
 [llm]
-provider = "none"
-endpoint_env = "AGENTOS_LLM_ENDPOINT"
+provider = "openai-responses"
+env_file = ".env"
+endpoint_env = "OPENAI_BASE_URL"
 api_key_env = "OPENAI_API_KEY"
 model_env = "AGENTOS_LLM_MODEL"
 temperature = 0.2
@@ -63,4 +64,3 @@ catalog = [
   "qa",
   "project management"
 ]
-

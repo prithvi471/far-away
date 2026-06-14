@@ -65,20 +65,33 @@ Then call:
 - `POST /performance`
 - `POST /ingest-document`
 
-## LLM Provider
+## OpenAI Provider
 
-Core lifecycle agents run locally. Open-ended coding and richer reasoning need a model provider.
+Core lifecycle agents run locally. Open-ended coding and richer reasoning use the OpenAI Responses API provider when `OPENAI_API_KEY` is configured.
 
-Set an OpenAI-compatible chat completion provider:
+Create a local `.env` from `.env.example`:
 
 ```powershell
-$env:AGENTOS_LLM_PROVIDER = "openai-compatible-chat"
-$env:OPENAI_API_KEY = "your_key"
-$env:AGENTOS_LLM_MODEL = "your_model"
-$env:AGENTOS_LLM_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+Copy-Item .env.example .env
 ```
 
-The model must return JSON for coding file generation. The coding agent validates every file path and only writes inside the configured workspace root.
+Then set:
+
+```text
+AGENTOS_LLM_PROVIDER=openai-responses
+OPENAI_BASE_URL=https://api.openai.com/v1
+AGENTOS_LLM_MODEL=gpt-5.5
+OPENAI_API_KEY=your_key
+```
+
+Check the connection state without printing secrets:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m agent_workforce_os llm-status
+```
+
+The coding agent requests a strict structured JSON coding plan, validates every generated path, and only writes inside the configured workspace root.
 
 ## Configuration
 
@@ -98,4 +111,3 @@ Recommended next build steps:
 4. Add richer document adapters for PDF, Google Drive, SharePoint, Slack, GitHub, and Jira.
 5. Add trace visualization and human approval gates before code-writing agents modify customer repositories.
 6. Add eval datasets for router accuracy, document extraction accuracy, and coding agent quality.
-

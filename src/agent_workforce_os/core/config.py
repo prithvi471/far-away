@@ -37,11 +37,12 @@ class WorkspaceConfig:
 @dataclass
 class LLMConfig:
     provider: str = "none"
-    endpoint_env: str = "AGENTOS_LLM_ENDPOINT"
+    endpoint_env: str = "OPENAI_BASE_URL"
     api_key_env: str = "OPENAI_API_KEY"
     model_env: str = "AGENTOS_LLM_MODEL"
     temperature: float = 0.2
     timeout_seconds: int = 60
+    env_file: Path | None = None
 
 
 @dataclass
@@ -84,6 +85,21 @@ def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
     return {}
 
 
+def load_env_file(path: str | Path) -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def load_config(path: str | Path | None = None) -> RuntimeConfig:
     env_path = os.environ.get("AGENTOS_CONFIG")
     config_path = Path(path or env_path or "configs/default.toml")
@@ -101,6 +117,10 @@ def load_config(path: str | Path | None = None) -> RuntimeConfig:
     routing = _section(data, "routing")
     monitoring = _section(data, "monitoring")
     skills = _section(data, "skills")
+    env_file = llm.get("env_file", ".env")
+    env_file_path = _resolve_path(env_file, base_dir) if env_file else None
+    if env_file_path:
+        load_env_file(env_file_path)
 
     return RuntimeConfig(
         root_dir=base_dir,
@@ -113,11 +133,12 @@ def load_config(path: str | Path | None = None) -> RuntimeConfig:
         ),
         llm=LLMConfig(
             provider=str(llm.get("provider", "none")),
-            endpoint_env=str(llm.get("endpoint_env", "AGENTOS_LLM_ENDPOINT")),
+            endpoint_env=str(llm.get("endpoint_env", "OPENAI_BASE_URL")),
             api_key_env=str(llm.get("api_key_env", "OPENAI_API_KEY")),
             model_env=str(llm.get("model_env", "AGENTOS_LLM_MODEL")),
             temperature=float(llm.get("temperature", 0.2)),
             timeout_seconds=int(llm.get("timeout_seconds", 60)),
+            env_file=env_file_path,
         ),
         routing=RoutingConfig(
             min_confidence=float(routing.get("min_confidence", 0.25)),
@@ -130,4 +151,3 @@ def load_config(path: str | Path | None = None) -> RuntimeConfig:
         monitoring=MonitoringConfig(stale_hours=int(monitoring.get("stale_hours", 24))),
         skills_catalog=[str(skill).lower() for skill in skills.get("catalog", DEFAULT_SKILLS)],
     )
-

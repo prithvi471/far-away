@@ -58,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("monitor", help="Run monitoring cycle")
     sub.add_parser("performance", help="Recalculate performance scores")
+    sub.add_parser("llm-status", help="Show configured LLM provider status without exposing secrets")
     sub.add_parser("list-workers", help="List workers and digital agents")
     sub.add_parser("list-tasks", help="List tasks")
     sub.add_parser("list-documents", help="List documents")
@@ -117,6 +118,18 @@ def main(argv: list[str] | None = None) -> None:
         _print(orchestrator.monitor())
     elif args.command == "performance":
         _print(orchestrator.recalculate_performance())
+    elif args.command == "llm-status":
+        provider = orchestrator.context.llm
+        _print(
+            {
+                "provider": provider.name,
+                "available": provider.available,
+                "model": getattr(provider, "model", None),
+                "endpoint": getattr(provider, "endpoint", None),
+                "api_key_env": config.llm.api_key_env,
+                "env_file": str(config.llm.env_file) if config.llm.env_file else None,
+            }
+        )
     elif args.command == "list-workers":
         _print([asdict(worker) for worker in orchestrator.context.storage.list_workers()])
     elif args.command == "list-tasks":
@@ -127,4 +140,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-
