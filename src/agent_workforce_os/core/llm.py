@@ -30,6 +30,26 @@ class LLMProvider:
         response = self.complete(system, user)
         return parse_json_text(response.text)
 
+    def smoke_test(self) -> dict[str, Any]:
+        if not self.available:
+            return {"status": "not_configured", "provider": self.name, "available": False}
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "ok": {"type": "boolean"},
+                "message": {"type": "string"},
+            },
+            "required": ["ok", "message"],
+        }
+        result = self.complete_json(
+            system="You verify LLM provider connectivity for an operations system.",
+            user="Return ok true and a short message.",
+            schema=schema,
+            name="llm_smoke_test",
+        )
+        return {"status": "ok" if result.get("ok") is True else "unexpected_response", "provider": self.name, "available": True, "result": result}
+
 
 class NoopLLMProvider(LLMProvider):
     name = "none"
@@ -99,24 +119,28 @@ class OpenAIResponsesProvider(LLMProvider):
         return bool(self.api_key and self.model)
 
     def complete(self, system: str, user: str) -> LLMResponse:
-        return self._request({"model": self.model, "instructions": system, "input": user})
+        return self._request(self._base_payload(system, user))
 
     def complete_json(self, system: str, user: str, schema: dict[str, Any], name: str) -> dict[str, Any]:
-        payload = {
-            "model": self.model,
-            "instructions": system,
-            "input": user,
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": name,
-                    "strict": True,
-                    "schema": schema,
-                }
-            },
+        payload = self._base_payload(system, user)
+        payload["text"] = {
+            "format": {
+                "type": "json_schema",
+                "name": name,
+                "strict": True,
+                "schema": schema,
+            }
         }
         response = self._request(payload)
         return parse_json_text(response.text)
+
+    def _base_payload(self, system: str, user: str) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "instructions": system,
+            "input": user,
+            "store": self.config.store_responses,
+        }
 
     def _request(self, payload: dict[str, Any]) -> LLMResponse:
         if not self.available:
@@ -138,6 +162,8 @@ class OpenAIResponsesProvider(LLMProvider):
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"OpenAI Responses HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"OpenAI Responses connection failed: {exc.reason}") from exc
 
         text = extract_responses_text(raw)
         return LLMResponse(text=text, raw=raw)

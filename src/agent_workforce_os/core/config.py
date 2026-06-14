@@ -42,6 +42,7 @@ class LLMConfig:
     model_env: str = "AGENTOS_LLM_MODEL"
     temperature: float = 0.2
     timeout_seconds: int = 60
+    store_responses: bool = False
     env_file: Path | None = None
 
 
@@ -138,6 +139,7 @@ def load_config(path: str | Path | None = None) -> RuntimeConfig:
             model_env=str(llm.get("model_env", "AGENTOS_LLM_MODEL")),
             temperature=float(llm.get("temperature", 0.2)),
             timeout_seconds=int(llm.get("timeout_seconds", 60)),
+            store_responses=bool(llm.get("store_responses", False)),
             env_file=env_file_path,
         ),
         routing=RoutingConfig(

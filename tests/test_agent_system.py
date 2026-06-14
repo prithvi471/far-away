@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -12,7 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from agent_workforce_os.agents.orchestrator import AgentOrchestrator
 from agent_workforce_os.core.agent import AgentContext
 from agent_workforce_os.core.config import LLMConfig, MonitoringConfig, RoutingConfig, RuntimeConfig, StorageConfig, WorkspaceConfig, load_env_file
-from agent_workforce_os.core.llm import extract_responses_text, parse_json_text
+from agent_workforce_os.core.llm import OpenAIResponsesProvider, extract_responses_text, parse_json_text
 from agent_workforce_os.core.llm import NoopLLMProvider
 from agent_workforce_os.core.models import TaskStatus, WorkerKind
 from agent_workforce_os.core.storage import SQLiteStore
@@ -174,6 +176,88 @@ model_env = "AGENTOS_LLM_MODEL"
                 main(["--config", str(config_path), "llm-status"])
             self.assertNotIn("secret-value", output.getvalue())
             self.assertIn("openai-responses", output.getvalue())
+
+    def test_llm_smoke_test_cli_handles_missing_key(self) -> None:
+        from agent_workforce_os.cli import main
+        from io import StringIO
+        import contextlib
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config_path = root / "config.toml"
+            config_path.write_text(
+                f"""
+[storage]
+database_path = "{(root / 'agentos.db').as_posix()}"
+[workspace]
+root_path = "{(root / 'workspaces').as_posix()}"
+artifact_path = "{(root / 'artifacts').as_posix()}"
+[llm]
+provider = "openai-responses"
+api_key_env = "AGENTOS_MISSING_OPENAI_KEY"
+model_env = "AGENTOS_MISSING_OPENAI_MODEL"
+""".strip(),
+                encoding="utf-8",
+            )
+            output = StringIO()
+            with contextlib.redirect_stdout(output):
+                main(["--config", str(config_path), "llm-smoke-test"])
+            payload = json.loads(output.getvalue())
+            self.assertEqual(payload["status"], "not_configured")
+            self.assertFalse(payload["available"])
+
+    def test_openai_responses_smoke_test_uses_structured_output_and_store_false(self) -> None:
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return json.dumps({"output_text": "{\"ok\": true, \"message\": \"connected\"}"}).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            captured["payload"] = json.loads(request.data.decode("utf-8"))
+            captured["authorization"] = request.headers.get("Authorization")
+            return FakeResponse()
+
+        env_values = {
+            "AGENTOS_FAKE_OPENAI_KEY": "secret-value",
+            "AGENTOS_FAKE_OPENAI_MODEL": "gpt-5.5",
+            "AGENTOS_FAKE_OPENAI_BASE": "https://api.openai.com/v1",
+        }
+        old_values = {key: os.environ.get(key) for key in env_values}
+        os.environ.update(env_values)
+        try:
+            config = LLMConfig(
+                endpoint_env="AGENTOS_FAKE_OPENAI_BASE",
+                api_key_env="AGENTOS_FAKE_OPENAI_KEY",
+                model_env="AGENTOS_FAKE_OPENAI_MODEL",
+                store_responses=False,
+            )
+            provider = OpenAIResponsesProvider(config)
+            with patch("agent_workforce_os.core.llm.urllib.request.urlopen", fake_urlopen):
+                result = provider.smoke_test()
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(captured["url"], "https://api.openai.com/v1/responses")
+        self.assertEqual(captured["timeout"], 60)
+        self.assertEqual(captured["authorization"], "Bearer secret-value")
+        self.assertFalse(captured["payload"]["store"])
+        self.assertEqual(captured["payload"]["text"]["format"]["type"], "json_schema")
+        self.assertEqual(captured["payload"]["text"]["format"]["name"], "llm_smoke_test")
+        self.assertTrue(captured["payload"]["text"]["format"]["strict"])
 
 
 if __name__ == "__main__":

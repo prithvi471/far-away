@@ -59,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("monitor", help="Run monitoring cycle")
     sub.add_parser("performance", help="Recalculate performance scores")
     sub.add_parser("llm-status", help="Show configured LLM provider status without exposing secrets")
+    sub.add_parser("llm-smoke-test", help="Run a live structured-output LLM connectivity check")
     sub.add_parser("list-workers", help="List workers and digital agents")
     sub.add_parser("list-tasks", help="List tasks")
     sub.add_parser("list-documents", help="List documents")
@@ -130,6 +131,9 @@ def main(argv: list[str] | None = None) -> None:
                 "env_file": str(config.llm.env_file) if config.llm.env_file else None,
             }
         )
+    elif args.command == "llm-smoke-test":
+        provider = orchestrator.context.llm
+        _print(provider.smoke_test())
     elif args.command == "list-workers":
         _print([asdict(worker) for worker in orchestrator.context.storage.list_workers()])
     elif args.command == "list-tasks":

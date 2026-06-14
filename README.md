@@ -91,6 +91,13 @@ $env:PYTHONPATH = "src"
 python -m agent_workforce_os llm-status
 ```
 
+Run a live structured-output smoke test after adding `OPENAI_API_KEY`:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m agent_workforce_os llm-smoke-test
+```
+
 The coding agent requests a strict structured JSON coding plan, validates every generated path, and only writes inside the configured workspace root.
 
 ## Configuration
